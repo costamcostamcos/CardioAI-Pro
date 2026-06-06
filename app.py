@@ -122,12 +122,8 @@ def extract_1d_signal_vector(cleaned_pil_image):
                 
     return np.array(signal_1d)
 
-# --- REFORMACJA: WIELOPUNKTOWY DETEKTOR ANOMALII Z TŁUMIENIEM SĄSIEDZTWA (NMS) ---
 def draw_anomalies_on_image(cleaned_pil_image, signal_1d, pathologies):
-    """
-    Skanuje sygnał i dynamicznie zakreśla WSZYSTKIE znalezione nieprawidłowości,
-    rozsuwając kółka kardiologiczne na bazie kolejnych maksimów lokalnych gradientu.
-    """
+    """Skanuje sygnał i dynamicznie zakreśla wszystkie znalezione nieprawidłowości."""
     img_bgr = cv2.cvtColor(np.array(cleaned_pil_image.convert('RGB')), cv2.COLOR_RGB2BGR)
     h, w = img_bgr.shape[:2]
     
@@ -137,7 +133,6 @@ def draw_anomalies_on_image(cleaned_pil_image, signal_1d, pathologies):
         gradients = np.abs(np.diff(signal_1d))
         temp_grads = gradients.copy()
         
-        # 1. Szukamy tylu odseparowanych punktów (pików), ile wynosi liczba patologii
         chosen_indices = []
         for _ in range(len(real_pathologies)):
             if np.max(temp_grads) <= 0:
@@ -145,33 +140,26 @@ def draw_anomalies_on_image(cleaned_pil_image, signal_1d, pathologies):
             idx = int(np.argmax(temp_grads))
             chosen_indices.append(idx)
             
-            # Tłumienie sąsiedztwa (promień 50px), aby zapobiec rysowaniu kółek w jednym punkcie
             start = max(0, idx - 50)
             end = min(len(temp_grads), idx + 50)
             temp_grads[start:end] = -1
             
-        # 2. Rysujemy geometryczne oznaczenia dla każdego defektu medycznego
         for i, path in enumerate(real_pathologies):
             if i < len(chosen_indices):
                 grad_idx = chosen_indices[i]
             else:
-                # Fallback zabezpieczający w razie braku wyraźnych pików
                 grad_idx = min(len(signal_1d) - 1, max(0, chosen_indices[-1] + (i * 40))) if chosen_indices else 0
                 
             x_pos = grad_idx
             y_pos = int(h - signal_1d[grad_idx])
             
-            # Kontrola wyjścia poza krawędzie dokumentu
             x_pos = max(40, min(x_pos, w - 40))
             y_pos = max(40, min(y_pos, h - 40))
             
-            # Pobranie uproszczonej nazwy anomalii do ramki
             path_name = path["patologia"].split(" (")[0]
             
-            # Rysowanie wyrazistego okręgu wokół defektu
             cv2.circle(img_bgr, (x_pos, y_pos), 35, (0, 0, 255), 3, cv2.LINE_AA)
             
-            # Niezależne pozycjonowanie etykiety tekstowej nad okręgiem
             label_y = y_pos - 45
             cv2.rectangle(img_bgr, (x_pos - 50, label_y - 14), (x_pos + 130, label_y + 4), (0, 0, 255), cv2.FILLED)
             cv2.putText(img_bgr, f"AI: {path_name[:16]}", (x_pos - 45, label_y - 1), 
@@ -403,8 +391,6 @@ if menu == "Pojedyncza Analiza / Skan":
             signal_1d_vec = extract_1d_signal_vector(cleaned_img)
             
             res_data = run_advanced_ecg_models(cleaned_img, p_age, gender_map[p_gender], symptoms_map[p_symptoms]) 
-            
-            # WYWOŁANIE NOWEGO MODUŁU MULTI-ANOMALY DRAWING
             anomaly_img = draw_anomalies_on_image(cleaned_img, signal_1d_vec, res_data["pathologies"])
             
             img_np = np.array(cleaned_img.convert('RGB'))
@@ -477,7 +463,6 @@ if menu == "Pojedyncza Analiza / Skan":
                     st.markdown(ai_desc)
                     st.markdown(ai_recs)
                     
-                    # Wizualizacja zakreślonych WSZYSTKICH anomalii kardiologicznych w dedykowanej podzakładce
                     sub_tab1, sub_tab2, sub_tab3, sub_tab4, sub_tab5 = st.tabs([
                         "🧠 Wizualizacja Wag Atencji (XAI)", "🎯 Zakreślone Anomalie (OpenCV 1D)",
                         "🖼️ Kadr po filtracji OpenCV", "📈 Wyekstrahowany Sygnał 1D (Cyfryzacja)", 
@@ -598,7 +583,7 @@ if menu == "Pojedyncza Analiza / Skan":
             key="global_report_download_btn"
         )
 
-# TRYB 2: TRENDY I HISTORIA
+# --- FIX: POPRAWIONO BŁĄD SQUASZOWANIA ZMIENNEJ P_AGE W TRYBIE TRENDÓW ---
 elif menu == "Trendy i Historia":
     st.header("📈 Monitorowanie Analizy Trendów")
     multiple_files = st.file_uploader("Wybierz pliki...", type=["jpg", "jpeg", "png", "pdf"], accept_multiple_files=True)
@@ -614,7 +599,8 @@ elif menu == "Trendy i Historia":
         trend_data = []
         for i, img in enumerate(all_imgs):
             cleaned_img, _ = opencv_deskew_and_clean(img)
-            res = run_advanced_ecg_models(cleaned_img, p_age, 0.0, 0.0)
+            # Podstawiamy bezpieczną wartość domyślną 69 dla potoku Wide-Path w pętli trendów
+            res = run_advanced_ecg_models(cleaned_img, 69, 0.0, 0.0)
             trend_data.append({
                 "Data": dates[i], "Źródło": labels[i], "Puls": res["metrics"]["bpm"], "QRS (ms)": res["metrics"]["qrs_ms"], "QTc (ms)": res["metrics"]["qtc_ms"]
             })
