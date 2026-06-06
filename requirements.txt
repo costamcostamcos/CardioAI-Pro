@@ -6,4 +6,4 @@ matplotlib
 pymupdf
 torch
 torchvision
-opencv-python
+opencv-python-headless
